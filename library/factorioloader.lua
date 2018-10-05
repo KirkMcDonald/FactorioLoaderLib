@@ -28,10 +28,7 @@ function Loader.load_data(game_path, mod_dir)
     local module_info = {}
     local order
 
-    local f = io.open(mod_dir .. "/mod-settings.json")
-    local s = f:read("*a")
-    settings = JSON:decode(s)
-    f:close()
+    settings = Loader.get_mod_settings(mod_dir)
 
     for i = 1, #paths do
         Loader.addModuleInfo(paths[i], module_info)
@@ -109,6 +106,96 @@ function dep_base(dep)
         return dep
     end
     return string.sub(dep, 1, i-1)
+end
+
+local function load_string_from_prop_tree(input, index)
+    local is_empty = string.unpack("<B", input, index)
+    local text
+    index = index + 1
+    if is_empty == 0 then
+        local string_size = string.unpack("<B", input, index)
+        index = index + 1
+        if string_size == 255 then
+            string_size = string.unpack("<I4", input, index)
+            index = index + 4
+        end
+        text = string.unpack("<c" .. string_size, input, index)
+        index = index + string_size
+    else
+        text = ""
+    end
+    return text, index
+end
+
+local function read_property_tree(input, index)
+    -- Implementation based on code provided by Rseding
+    -- https://www.dropbox.com/sh/uscmj9y3cjfwpsr/AAD35_ZZu64EBi0awLA07fxga?dl=0
+    local type, _ = string.unpack("<BB", input, index)
+    index = index + 2
+
+    local property_val
+
+    if type == 0 then
+        -- None
+        -- do nothing
+        property_val = nil
+
+    elseif type == 1 then
+        -- Boolean
+        local bool = string.unpack("<B", input, index)
+        property_val = bool and true or false
+        index = index + 1
+
+    elseif type == 2 then
+        -- Number
+        property_val = string.unpack("<d", input, index)
+        index = index + string.packsize("<d")
+
+    elseif type == 3 then
+        -- String
+        return load_string_from_prop_tree(input, index)
+
+    elseif type == 4 then
+        -- List
+        local elem_count = string.unpack("<I4", input, index)
+        index = index + 4
+        property_val = {}
+        for i=1, elem_count, 1 do
+            -- Lists are dicts that don't use the key
+            local _, idx = load_string_from_prop_tree(input, index)
+            index = idx
+            property_val[i], index = read_property_tree(input, index)
+        end
+
+    elseif type == 5 then
+        -- Dictionary
+        local elem_count = string.unpack("<I4", input, index)
+        index = index + 4
+        property_val = {}
+        for i=1, elem_count, 1 do
+            local key, idx = load_string_from_prop_tree(input, index)
+            index = idx
+            property_val[key], index = read_property_tree(input, index)
+        end
+
+    else
+        -- Invalid Type
+        error("Invalid type ID " .. type)
+    end
+
+    return property_val, index
+end
+
+function Loader.get_mod_settings(mod_dir)
+    local file = assert(io.open(mod_dir .. "/mod-settings.dat", "rb"))
+    local settings_file = file:read("*a")
+    file:close()
+
+    -- Skip first 8 bytes (map version)
+    local file_pos = 9
+
+    local settings= read_property_tree(settings_file, file_pos)
+    return settings
 end
 
 function Loader.getModList(mod_dir)
