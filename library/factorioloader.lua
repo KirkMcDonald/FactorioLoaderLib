@@ -33,13 +33,14 @@ function Loader.load_data(game_path, mod_dir)
     for i = 1, #paths do
         Loader.addModuleInfo(paths[i], module_info)
     end
-    local mods = Loader.getModList(mod_dir)
+    mods = Loader.getModList(mod_dir)
     for filename in lfs.dir(mod_dir) do
         local mod_name = string.gsub(filename, "(.+)_[^_]+", "%1")
         if mods[mod_name] ~= nil then
             if endswith(filename, ".zip") then
                 local info = ZipModule.new(mod_dir, string.sub(filename, 1, -5))
                 module_info[mod_name] = info
+                mods[mod_name] = info.version
             else
             end
         end
