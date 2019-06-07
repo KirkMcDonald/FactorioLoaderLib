@@ -18,12 +18,21 @@ function SettingLoader.readBool(f)
     return SettingLoader.readByte(f) == 1
 end
 
+function SettingLoader.readShort(f)
+    return string.unpack("<i2", readAll(f, 2))
+end
+
 function SettingLoader.readInt(f)
     return string.unpack("<i4", readAll(f, 4))
 end
 
 function SettingLoader.readFloat(f)
     return string.unpack("<d", readAll(f, 8))
+end
+
+function SettingLoader.readVersion(f)
+    return 0x1000000 * SettingLoader.readShort(f) + 0x10000 * SettingLoader.readShort(f)
+        + 0x100 * SettingLoader.readShort(f) + SettingLoader.readShort(f)
 end
 
 function SettingLoader.readString(f)
@@ -72,7 +81,10 @@ function SettingLoader.load(filename)
     if f == nil then
         return {}
     end
-    local version = readAll(f, 8)
+    local version = SettingLoader.readVersion(f)
+    if version >= 0x110000 then -- factorio >= 0.17
+        local unusedFalse = readAll(f, 1)
+    end
     local settings = SettingLoader.readPropertyTree(f, 0)
     f:close()
     return settings
