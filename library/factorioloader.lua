@@ -4,6 +4,7 @@ JSON = require("externals/JSON") -- needed for the info.json-file
 
 require("lfs")
 require("zip")
+require("library/compat")
 
 defines = require("library/defines")
 local CFGParser = require("library/cfgparser")
