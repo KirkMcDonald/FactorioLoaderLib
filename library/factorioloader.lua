@@ -10,6 +10,11 @@ local CFGParser = require("library/cfgparser")
 local SettingLoader = require("library/settingloader")
 mods = {}
 
+local quotepattern = '(['..("%^$().[]*+-?"):gsub("(.)", "%%%1")..'])'
+function quotestring(str)
+    return str:gsub(quotepattern, "%%%1")
+end
+
 function endswith(s, sub)
     return string.sub(s, -string.len(sub)) == sub
 end
@@ -162,8 +167,9 @@ local function getDeps(module_info, name)
     local deps = {}
     --table.insert(deps, mod)
     for _, raw_dep in ipairs(mod.dependencies) do
+        raw_dep = string.gsub(raw_dep, "[()]", "")
         local dep = dep_base(raw_dep)
-        local required = string.sub(raw_dep, 1, 1) ~= "?"
+        local required = string.sub(raw_dep, 1, 1) ~= "?" and string.sub(raw_dep, 1, 1) ~= "!"
         if not module_info[dep] and required then
             return {}
         end
@@ -245,19 +251,53 @@ function ZipModLoader.new(dirname, mod_name, arc_subfolder)
         archive = arc,
         archive_name = filename,
         arc_subfolder = arc_subfolder,
+        path_history = {},
     }
     return setmetatable(mod, ZipModLoader)
 end
 function ZipModLoader:__call(name)
     name = string.gsub(name, "%.", "/")
     local filename = self.arc_subfolder .. name .. ".lua"
+
+    local cur_path, cur_name = string.match(name, "^(.-)([^\\/]+)$")
+
     local file = self.archive:open(filename)
+    if not file and cur_path == '' then
+        local relative_name = self:find_relative_path(cur_name)
+        if relative_name then
+            relative_name = self.arc_subfolder .. relative_name .. ".lua"
+            file = self.archive:open(relative_name)
+        end
+    end
     if not file then
         return "Not found: " .. filename .. " in " .. self.archive_name
+    end
+    if cur_path ~= '' then
+        self.path_history[cur_path] = 1
     end
     local content = file:read("*a")
     file:close()
     return load(content, filename)
+end
+function ZipModLoader.find_relative_path(self, name)
+    local found = nil
+    for path, _ in pairs(self.path_history) do
+        local filename = self.arc_subfolder .. path .. name .. ".lua"
+        local cur_file = self.archive:open(filename)
+        local this_found = cur_file ~= nil
+        if cur_file then
+            cur_file:close()
+        end
+        if this_found then
+            if found then
+                return
+            end
+            found = path
+        end
+    end
+    if found then
+        return found .. name
+    end
 end
 function ZipModLoader:close()
     self.archive:close()
@@ -308,7 +348,7 @@ function ZipModule.run(self, filename)
 end
 function ZipModule:locale(locales)
     local arc = assert(zip.open(self.zip_path))
-    local pattern = "^" .. self.arc_subfolder .. "locale/([^/]+)/.+%.cfg$"
+    local pattern = "^" .. quotestring(self.arc_subfolder) .. "locale/([^/]+)/.+%.cfg$"
     for info in arc:files() do
         local locale = info.filename:match(pattern)
         if locale ~= nil then
