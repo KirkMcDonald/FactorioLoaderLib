@@ -9,6 +9,7 @@ require("zip")
 
 local CFGParser = require("library/cfgparser")
 local SettingLoader = require("library/settingloader")
+local FileLoader = require("library/FileLoader")
 local ZipModLoader = require("library/ZipModLoader")
 local CrossModLoader = require("library/CrossModLoader")
 mods = {}
@@ -16,6 +17,12 @@ mods = {}
 function endswith(s, sub)
     return string.sub(s, -string.len(sub)) == sub
 end
+
+local special_mods = {
+    ["elevated-rails"] = true,
+    ["quality"] = true,
+    ["space-age"] = true,
+}
 
 --- Loads Factorio data files from a list of mods.
 -- executes all module loaders (data.lua),
@@ -39,9 +46,18 @@ function Loader.load_data(game_path, mod_dir)
         Loader.addModuleInfo(paths[i], module_info)
     end
     local modlist = Loader.getModList(mod_dir)
+    local mod_names = {}
+    for mod_name, _ in pairs(modlist) do
+        if special_mods[mod_name] then
+			Loader.addModuleInfo(game_path .. "/data/" .. mod_name, module_info)
+        else
+            mod_names[mod_name] = true
+        end
+    end
     for filename in lfs.dir(mod_dir) do
         local mod_name = string.gsub(filename, "(.+)_[^_]+", "%1")
         if modlist[mod_name] ~= nil then
+            mod_names[mod_name] = nil
             if endswith(filename, ".zip") then
                 local info = ZipModule.new(mod_dir, string.sub(filename, 1, -5))
                 module_info[mod_name] = info
@@ -49,6 +65,9 @@ function Loader.load_data(game_path, mod_dir)
                 error("Loading unzipped mods is not supported at the moment.")
             end
         end
+    end
+    for mod_name, _ in pairs(mod_names) do
+        io.stderr:write("didn't load: " .. mod_name .. "\n")
     end
 
     module_info = Loader.moduleInfoCompatibilityPatches(module_info)
@@ -231,19 +250,19 @@ Module = {}
 Module.__index = Module
 
 function Module:load(filename, action)
-    filename = string.gsub(filename, "%.", "/")
     action = action or function (f) return f end
-    local old_path = package.path
-    local file_path = self.localPath .. "/" .. filename .. ".lua"
-    local f = io.open(file_path, "r")
-    if f ~= nil then
-        io.close(f)
-    else
+    local loader = FileLoader.new(self.name, self.localPath .. "/")
+    table.insert(package.searchers, 2, loader)
+    local mod = loader(filename)
+    if type(mod) == "string" then
+        table.remove(package.searchers, 2)
         return
     end
-    package.path = self.localPath .. "/?.lua;" .. package.path
-    local ret = action(assert(loadfile(file_path)))
-    package.path = old_path
+    local ret
+    if mod ~= nil then
+        ret = action(mod)
+    end
+    table.remove(package.searchers, 2)
     return ret
 end
 function Module:run(filename)
