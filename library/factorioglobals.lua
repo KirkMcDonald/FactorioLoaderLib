@@ -1,4 +1,4 @@
-defines = require("library/defines")
+-- defines provided in Loader.load_data
 serpent = require("externals/serpent")
 
 function log(s)

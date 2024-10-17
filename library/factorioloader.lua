@@ -30,7 +30,12 @@ local special_mods = {
 -- after calling this function, the function replace_path can be used.
 -- @params table paths - list of mods that are loaded.
 --    - First one has to be "core"!
-function Loader.load_data(game_path, mod_dir)
+function Loader.load_data(game_path, mod_dir, version)
+    if version == nil then
+        version = "2"
+    end
+    defines = require("library/defines" .. version)
+
     local paths = {game_path .. "/data/core", game_path .. "/data/base"}
     local filenames = {"data", "data-updates", "data-final-fixes"}
 
@@ -49,7 +54,7 @@ function Loader.load_data(game_path, mod_dir)
     local mod_names = {}
     for mod_name, _ in pairs(modlist) do
         if special_mods[mod_name] then
-			Loader.addModuleInfo(game_path .. "/data/" .. mod_name, module_info)
+            Loader.addModuleInfo(game_path .. "/data/" .. mod_name, module_info)
         else
             mod_names[mod_name] = true
         end
