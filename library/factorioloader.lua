@@ -24,6 +24,15 @@ local special_mods = {
     ["space-age"] = true,
 }
 
+local orig_pairs = _G.pairs
+local function copy_pairs(t)
+    local copy = {}
+    for k, v in orig_pairs(t) do
+        copy[k] = v
+    end
+    return orig_pairs(copy)
+end
+
 --- Loads Factorio data files from a list of mods.
 -- executes all module loaders (data.lua),
 -- they do some stuff and extend the global variable "data",
@@ -34,6 +43,7 @@ function Loader.load_data(game_path, mod_dir, version)
     if version == nil then
         version = "2"
     end
+    _G.pairs = copy_pairs
     defines = require("library/defines" .. version)
 
     local paths = {game_path .. "/data/core", game_path .. "/data/base"}
@@ -122,6 +132,7 @@ function Loader.load_data(game_path, mod_dir, version)
         new_info[module_name] = module_info[module_name]
     end
     data.raw['module_info'] = new_info
+    _G.pairs = orig_pairs
     return locales
 end
 
